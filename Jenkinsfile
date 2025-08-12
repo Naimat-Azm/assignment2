@@ -13,12 +13,13 @@ pipeline {
             genericVariables: [
                 [key: 'ref', value: '$.ref'],
                 [key: 'action', value: '$.action'],
-                [key: 'base_branch', value: '$.pull_request.base.ref']
+                [key: 'base_branch', value: '$.pull_request.base.ref'],
+                [key: 'head_branch', value: '$.pull_request.head.ref']
             ],
             causeString: 'Triggered by GitHub webhook',
             token: 'github-webhook-token',
-            regexpFilterText: '$ref $action $base_branch',
-            regexpFilterExpression: '(refs/heads/develop|opened|synchronize.*develop)'
+            regexpFilterText: '$ref $action $base_branch $head_branch',
+            regexpFilterExpression: '(refs/heads/develop|opened.*main.*develop|synchronize.*main.*develop)'
         )
     }
     

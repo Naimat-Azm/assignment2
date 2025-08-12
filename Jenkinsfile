@@ -14,12 +14,15 @@ pipeline {
                 [key: 'ref', value: '$.ref'],
                 [key: 'action', value: '$.action'],
                 [key: 'base_branch', value: '$.pull_request.base.ref'],
-                [key: 'head_branch', value: '$.pull_request.head.ref']
+                [key: 'head_branch', value: '$.pull_request.head.ref'],
+                [key: 'event_name', value: '$.X-GitHub-Event']
             ],
-            causeString: 'Triggered by GitHub webhook',
+            causeString: 'Triggered by GitHub webhook: $event_name $action',
             token: 'github-webhook-token',
-            regexpFilterText: '$ref $action $base_branch $head_branch',
-            regexpFilterExpression: '(refs/heads/develop|opened.*main.*develop|synchronize.*main.*develop)'
+            regexpFilterText: '$event_name $action $base_branch $head_branch $ref',
+            regexpFilterExpression: '.*(push.*develop|pull_request.*(opened|synchronize).*main.*develop).*',
+            printContributedVariables: true,
+            printPostContent: true
         )
     }
     

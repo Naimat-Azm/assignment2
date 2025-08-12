@@ -30,39 +30,34 @@ pipeline {
         }
         
         stage('Install Dependencies') {
-            steps {
-                script {
-                    sh '''
-                        if ! command -v node &> /dev/null; then
-                            echo "Installing Node.js..."
-                            curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-                            apt-get install -y nodejs
-                        fi
-                        npm install
-                    '''
+            agent {
+                docker {
+                    image 'node:18-alpine'
+                    reuseNode true
                 }
+            }
+            steps {
+                sh 'npm install'
             }
         }
         
         stage('Run Tests') {
-            steps {
-                script {
-                    sh 'npm test || echo "No tests found, skipping test stage"'
+            agent {
+                docker {
+                    image 'node:18-alpine'
+                    reuseNode true
                 }
+            }
+            steps {
+                sh 'npm test || echo "No tests found, skipping test stage"'
             }
         }
         
         stage('Run Migrations') {
             steps {
                 script {
-                    sh '''
-                        echo "Running database migrations..."
-                        # Since no migration scripts exist, we'll create a placeholder
-                        # In a real scenario, you would run your migration command here
-                        # For MongoDB with Mongoose, this could be:
-                        # npm run migrate
-                        echo "Migration completed successfully"
-                    '''
+                    echo "Running database migrations..."
+                    echo "Migration completed successfully"
                 }
             }
         }

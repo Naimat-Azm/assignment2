@@ -1,5 +1,10 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'node:18-alpine'
+            args '-v /var/run/docker.sock:/var/run/docker.sock -u root'
+        }
+    }
     
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
@@ -63,6 +68,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
+                    sh "apk add --no-cache docker-cli"
                     sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
                     sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest"
                 }
@@ -78,6 +84,7 @@ pipeline {
             }
             steps {
                 script {
+                    sh "apk add --no-cache docker-cli"
                     sh "echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin"
                     sh "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
                     sh "docker push ${DOCKER_IMAGE}:latest"
@@ -110,7 +117,7 @@ pipeline {
                 sh """
                     curl -X POST -H 'Content-type: application/json' \\
                     --data '{"text": "${message}"}' \\
-                    ${SLACK_WEBHOOK}
+                    \${SLACK_WEBHOOK}
                 """
             }
         }
@@ -136,7 +143,7 @@ pipeline {
                 sh """
                     curl -X POST -H 'Content-type: application/json' \\
                     --data '{"text": "${message}"}' \\
-                    ${SLACK_WEBHOOK}
+                    \${SLACK_WEBHOOK}
                 """
             }
         }

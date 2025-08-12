@@ -75,7 +75,8 @@ pipeline {
             when {
                 anyOf {
                     branch 'develop'
-                    expression { env.CHANGE_TARGET == 'develop' && env.CHANGE_ID == null }
+                    expression { env.GIT_BRANCH == 'origin/develop' }
+                    expression { env.BRANCH_NAME == 'develop' }
                 }
             }
             steps {

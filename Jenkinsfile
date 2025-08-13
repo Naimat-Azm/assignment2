@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         SLACK_WEBHOOK = credentials('slack-webhook-url')
-        DOCKER_IMAGE = 'naimat/nodeapp'
+        DOCKER_IMAGE = 'naimatazmdev/assignment2'
         DOCKER_TAG = "${env.BUILD_NUMBER}"
     }
     
@@ -13,12 +13,16 @@ pipeline {
             genericVariables: [
                 [key: 'ref', value: '$.ref'],
                 [key: 'action', value: '$.action'],
-                [key: 'base_branch', value: '$.pull_request.base.ref']
+                [key: 'base_branch', value: '$.pull_request.base.ref'],
+                [key: 'head_branch', value: '$.pull_request.head.ref'],
+                [key: 'event_name', value: '$.X-GitHub-Event']
             ],
-            causeString: 'Triggered by GitHub webhook',
+            causeString: 'Triggered by GitHub webhook: $event_name $action',
             token: 'github-webhook-token',
-            regexpFilterText: '$ref $action $base_branch',
-            regexpFilterExpression: '(refs/heads/develop|opened|synchronize.*develop)'
+            regexpFilterText: '$event_name $action $base_branch $head_branch $ref',
+            regexpFilterExpression: '.*(push.*refs/heads/develop|opened main develop|synchronize main develop).*',
+            printContributedVariables: true,
+            printPostContent: true
         )
     }
     
@@ -81,9 +85,11 @@ pipeline {
             }
             steps {
                 script {
-                    sh "echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin"
+                    sh '''
+                        echo "$DOCKERHUB_CREDENTIALS_PSW" | docker login -u "$DOCKERHUB_CREDENTIALS_USR" --password-stdin
+                    '''
                     sh "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
-                    sh "docker push ${DOCKER_IMAGE}:latest"
+                
                     sh "docker logout"
                 }
             }

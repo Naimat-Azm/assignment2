@@ -11,16 +11,16 @@ pipeline {
     triggers {
         GenericTrigger(
             genericVariables: [
+                [key: 'ref', value: '$.ref'],
                 [key: 'base_branch', value: '$.pull_request.base.ref'],
                 [key: 'head_branch', value: '$.pull_request.head.ref'],
-                [key: 'push_branch', value: '$.ref'],
                 [key: 'action', value: '$.action'],
-                [key: 'event_name', value: '$.X-GitHub-Event', expressionType: 'HTTPHeaderValue']
+                [key: 'github_event', value: '$.X-GitHub-Event', expressionType: 'HTTPHeaderValue']
             ],
-            causeString: 'Triggered by GitHub webhook: $event_name $action',
+            causeString: 'Triggered by GitHub webhook',
             token: 'github-webhook-token',
-            regexpFilterText: '$event_name:$push_branch:$base_branch:$head_branch:$action',
-            regexpFilterExpression: '^(pull_request:.*:develop:feature/.*:(opened|synchronize)|push:refs/heads/develop:::)$',
+            regexpFilterText: '$github_event $ref $base_branch $head_branch $action',
+            regexpFilterExpression: '(^push refs/heads/develop.*|^pull_request.* develop feature/.* (opened|synchronize)$)',
             printContributedVariables: true,
             printPostContent: true
         )

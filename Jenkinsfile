@@ -19,8 +19,8 @@ pipeline {
             ],
             causeString: 'Triggered by GitHub webhook: $event_name $action',
             token: 'github-webhook-token',
-            regexpFilterText: '$event_name $action $base_branch $head_branch $push_branch',
-            regexpFilterExpression: '^(pull_request\\s+(opened|synchronize)\\s+develop\\s+feature/.*|push\\s+\\s+\\s+\\s+refs/heads/develop)$',
+            regexpFilterText: '$event_name:$push_branch:$base_branch:$head_branch:$action',
+            regexpFilterExpression: '^(pull_request:.*:develop:feature/.*:(opened|synchronize)|push:refs/heads/develop:::)$',
             printContributedVariables: true,
             printPostContent: true
         )

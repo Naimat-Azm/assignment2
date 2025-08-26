@@ -1,10 +1,15 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'node:18-alpine'
+            args '--privileged -v /var/run/docker.sock:/var/run/docker.sock'
+        }
+    }
     
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         SLACK_WEBHOOK = credentials('slack-webhook-url')
-        DOCKER_IMAGE = 'naimatazmdev/assignment2'
+        DOCKER_IMAGE = 'naimatazmdev/demoapp'
         DOCKER_TAG = "${env.BUILD_NUMBER}"
     }
     
@@ -63,6 +68,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
+                    sh "apk add --no-cache docker-cli"
                     sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
                     sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest"
                 }
@@ -78,6 +84,7 @@ pipeline {
             }
             steps {
                 script {
+                    sh "apk add --no-cache docker-cli"
                     sh "echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin"
                     sh "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
                     sh "docker push ${DOCKER_IMAGE}:latest"

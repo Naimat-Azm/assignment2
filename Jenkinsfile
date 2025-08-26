@@ -81,13 +81,6 @@ pipeline {
         }
         
         stage('Push to DockerHub') {
-            when {
-                anyOf {
-                    branch 'develop'
-                    branch 'main'
-                    expression { env.CHANGE_TARGET == 'develop' && env.CHANGE_ID == null }
-                }
-            }
             steps {
                 script {
                     sh "echo \$DOCKERHUB_CREDENTIALS_PSW | docker login -u \$DOCKERHUB_CREDENTIALS_USR --password-stdin"
@@ -111,10 +104,9 @@ pipeline {
                              "Target: ${env.CHANGE_TARGET}\\n" +
                              "Duration: ${currentBuild.durationString}"
                 } else {
-                    message = "✅ Jenkins Pipeline SUCCESS for push to ${env.BRANCH_NAME} branch\\n" +
+                    message = "✅ Jenkins Pipeline SUCCESS\\n" +
                              "Repository: ${env.JOB_NAME}\\n" +
                              "Build: #${env.BUILD_NUMBER}\\n" +
-                             "Branch: ${env.BRANCH_NAME}\\n" +
                              "Docker Image: ${DOCKER_IMAGE}:${DOCKER_TAG}\\n" +
                              "Duration: ${currentBuild.durationString}"
                 }
@@ -138,10 +130,9 @@ pipeline {
                              "Target: ${env.CHANGE_TARGET}\\n" +
                              "Duration: ${currentBuild.durationString}"
                 } else {
-                    message = "❌ Jenkins Pipeline FAILED for push to ${env.BRANCH_NAME} branch\\n" +
+                    message = "❌ Jenkins Pipeline FAILED\\n" +
                              "Repository: ${env.JOB_NAME}\\n" +
                              "Build: #${env.BUILD_NUMBER}\\n" +
-                             "Branch: ${env.BRANCH_NAME}\\n" +
                              "Duration: ${currentBuild.durationString}"
                 }
                 

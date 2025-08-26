@@ -166,7 +166,7 @@ pipeline {
     triggers {
         GenericTrigger(
             genericVariables: [
-                [key: 'ref', value: '$.ref']  // "refs/heads/main"
+                [key: 'ref', value: '$.ref']  
             ],
             causeString: 'Triggered by GitHub webhook',
             token: 'github-webhook-token',

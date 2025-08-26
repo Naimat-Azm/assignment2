@@ -32,7 +32,11 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 script {
-                    sh 'docker run --rm -v $PWD:/app -w /app node:18-alpine npm install'
+                    sh '''
+                        ls -la
+                        pwd
+                        docker run --rm -v $PWD/nodeapp:/app -w /app node:18-alpine npm install
+                    '''
                 }
             }
         }
@@ -40,7 +44,7 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    sh 'docker run --rm -v $PWD:/app -w /app node:18-alpine npm test || echo "No tests found, skipping test stage"'
+                    sh 'docker run --rm -v $PWD/nodeapp:/app -w /app node:18-alpine npm test || echo "No tests found, skipping test stage"'
                 }
             }
         }
@@ -63,7 +67,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
+                    sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ./nodeapp"
                     sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest"
                 }
             }

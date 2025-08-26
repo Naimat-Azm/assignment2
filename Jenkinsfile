@@ -32,11 +32,14 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 script {
+                    // Use the jenkins container itself which has docker and can access the workspace
                     sh '''
-                        ls -la package.json
-                        cat package.json
-                        docker run --rm -v $PWD:/app -w /app node:18-alpine ls -la
-                        docker run --rm -v $PWD:/app -w /app node:18-alpine npm install
+                        # Install Node.js directly in Jenkins container for this build
+                        if ! command -v node >/dev/null 2>&1; then
+                            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+                            sudo apt-get install -y nodejs
+                        fi
+                        npm install
                     '''
                 }
             }
@@ -45,7 +48,7 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    sh 'docker run --rm -v $PWD:/app -w /app node:18-alpine npm test || echo "No tests found, skipping test stage"'
+                    sh 'npm test || echo "No tests found, skipping test stage"'
                 }
             }
         }
@@ -78,12 +81,13 @@ pipeline {
             when {
                 anyOf {
                     branch 'develop'
+                    branch 'main'
                     expression { env.CHANGE_TARGET == 'develop' && env.CHANGE_ID == null }
                 }
             }
             steps {
                 script {
-                    sh "echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin"
+                    sh "echo \$DOCKERHUB_CREDENTIALS_PSW | docker login -u \$DOCKERHUB_CREDENTIALS_USR --password-stdin"
                     sh "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
                     sh "docker push ${DOCKER_IMAGE}:latest"
                     sh "docker logout"
@@ -104,7 +108,7 @@ pipeline {
                              "Target: ${env.CHANGE_TARGET}\\n" +
                              "Duration: ${currentBuild.durationString}"
                 } else {
-                    message = "✅ Jenkins Pipeline SUCCESS for push to develop branch\\n" +
+                    message = "✅ Jenkins Pipeline SUCCESS for push to ${env.BRANCH_NAME} branch\\n" +
                              "Repository: ${env.JOB_NAME}\\n" +
                              "Build: #${env.BUILD_NUMBER}\\n" +
                              "Branch: ${env.BRANCH_NAME}\\n" +
@@ -115,7 +119,7 @@ pipeline {
                 sh """
                     curl -X POST -H 'Content-type: application/json' \\
                     --data '{"text": "${message}"}' \\
-                    ${SLACK_WEBHOOK}
+                    \${SLACK_WEBHOOK}
                 """
             }
         }
@@ -127,21 +131,21 @@ pipeline {
                     message = "❌ Jenkins Pipeline FAILED for PR #${env.CHANGE_ID} to develop branch\\n" +
                              "Repository: ${env.JOB_NAME}\\n" +
                              "Build: #${env.BUILD_NUMBER}\\n" +
-                             
+                             "Branch: ${env.CHANGE_BRANCH}\\n" +
                              "Target: ${env.CHANGE_TARGET}\\n" +
                              "Duration: ${currentBuild.durationString}"
                 } else {
-                    message = "❌ Jenkins Pipeline FAILED for push to develop branch\\n" +
+                    message = "❌ Jenkins Pipeline FAILED for push to ${env.BRANCH_NAME} branch\\n" +
                              "Repository: ${env.JOB_NAME}\\n" +
                              "Build: #${env.BUILD_NUMBER}\\n" +
-                             
+                             "Branch: ${env.BRANCH_NAME}\\n" +
                              "Duration: ${currentBuild.durationString}"
                 }
                 
                 sh """
                     curl -X POST -H 'Content-type: application/json' \\
                     --data '{"text": "${message}"}' \\
-                    ${SLACK_WEBHOOK}
+                    \${SLACK_WEBHOOK}
                 """
             }
         }
@@ -154,9 +158,3 @@ pipeline {
         }
     }
 }
-
-
-
-
-        
-      

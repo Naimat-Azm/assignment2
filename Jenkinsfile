@@ -36,8 +36,9 @@ pipeline {
                     sh '''
                         # Install Node.js directly in Jenkins container for this build
                         if ! command -v node >/dev/null 2>&1; then
-                            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-                            sudo apt-get install -y nodejs
+                            curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+                            apt-get update
+                            apt-get install -y nodejs
                         fi
                         npm install
                     '''

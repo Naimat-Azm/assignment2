@@ -150,36 +150,31 @@
 //     }
 // }
 
+
+
+
 pipeline {
     agent any
     
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         SLACK_WEBHOOK = credentials('slack-webhook-url')
-        DOCKER_IMAGE = 'naimatazmdev/assignment2'
+        DOCKER_IMAGE = 'naimat/nodeapp'
         DOCKER_TAG = "${env.BUILD_NUMBER}"
     }
     
     triggers {
         GenericTrigger(
             genericVariables: [
-                [key: 'ref', value: '$.ref'],   // e.g. "refs/heads/main"
-                [key: 'action', value: '$.action'],
-                [key: 'base_branch', value: '$.pull_request.base.ref'],
-                [key: 'head_branch', value: '$.pull_request.head.ref'],
-                [key: 'event_name', value: '$.X-GitHub-Event']
+                [key: 'ref', value: '$.ref']  // "refs/heads/main"
             ],
-            causeString: 'Triggered by GitHub webhook: $event_name $action',
+            causeString: 'Triggered by GitHub webhook',
             token: 'github-webhook-token',
-            regexpFilterText: '$ref $action $base_branch',
-            // 🔥 Changed this to trigger ONLY when push is to main
+            regexpFilterText: '$ref',
             regexpFilterExpression: 'refs/heads/main'
-            regexpFilterText: '$event_name $action $base_branch $head_branch $ref',
-            regexpFilterExpression: '.*(push.*refs/heads/develop|opened main develop|synchronize main develop).*',
-            printContributedVariables: true,
-            printPostContent: true
         )
     }
+
     
     stages {
         stage('Checkout') {
@@ -189,26 +184,18 @@ pipeline {
         }
         
         stage('Install Dependencies') {
-            agent {
-                docker {
-                    image 'node:18-alpine'
-                    reuseNode true
-                }
-            }
             steps {
-                sh 'npm install'
+                script {
+                    sh 'npm install'
+                }
             }
         }
         
         stage('Run Tests') {
-            agent {
-                docker {
-                    image 'node:18-alpine'
-                    reuseNode true
-                }
-            }
             steps {
-                sh 'npm test || echo "No tests found, skipping test stage"'
+                script {
+                    sh 'npm test || echo "No tests found, skipping test stage"'
+                }
             }
         }
         
@@ -220,8 +207,6 @@ pipeline {
                         # Example migration step (adjust for your DB)
                         echo "Migration completed successfully"
                     '''
-                    echo "Running database migrations..."
-                    echo "Migration completed successfully"
                 }
             }
         }
@@ -239,19 +224,12 @@ pipeline {
             // 🔥 Changed: only push when branch == main
             when {
                 branch 'main'
-                anyOf {
-                    branch 'develop'
-                    expression { env.GIT_BRANCH == 'origin/develop' }
-                    expression { env.BRANCH_NAME == 'develop' }
-                }
             }
             steps {
                 script {
-                    sh '''
-                        echo "$DOCKERHUB_CREDENTIALS_PSW" | docker login -u "$DOCKERHUB_CREDENTIALS_USR" --password-stdin
-                    '''
+                    sh "echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin"
                     sh "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
-                
+                    sh "docker push ${DOCKER_IMAGE}:latest"
                     sh "docker logout"
                 }
             }
@@ -282,9 +260,6 @@ pipeline {
                     curl -X POST -H 'Content-type: application/json' \
                     --data '{"text": "${message}"}' \
                     ${SLACK_WEBHOOK}
-                    curl -X POST -H 'Content-type: application/json' \\
-                    --data '{"text": "${message}"}' \\
-                    \${SLACK_WEBHOOK}
                 """
             }
         }
@@ -309,9 +284,6 @@ pipeline {
                     curl -X POST -H 'Content-type: application/json' \
                     --data '{"text": "${message}"}' \
                     ${SLACK_WEBHOOK}
-                    curl -X POST -H 'Content-type: application/json' \\
-                    --data '{"text": "${message}"}' \\
-                    \${SLACK_WEBHOOK}
                 """
             }
         }
@@ -324,5 +296,3 @@ pipeline {
         }
     }
 }
-
-

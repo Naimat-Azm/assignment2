@@ -32,14 +32,7 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 script {
-                    sh '''
-                        # Install Node.js and npm if not available
-                        if ! command -v node &> /dev/null; then
-                            curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-                            apt-get install -y nodejs
-                        fi
-                        npm install
-                    '''
+                    sh 'docker run --rm -v $PWD:/app -w /app node:18-alpine npm install'
                 }
             }
         }
@@ -47,7 +40,7 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    sh 'npm test || echo "No tests found, skipping test stage"'
+                    sh 'docker run --rm -v $PWD:/app -w /app node:18-alpine npm test || echo "No tests found, skipping test stage"'
                 }
             }
         }

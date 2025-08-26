@@ -159,7 +159,7 @@ pipeline {
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         SLACK_WEBHOOK = credentials('slack-webhook-url')
-        DOCKER_IMAGE = 'naimat/nodeapp'
+        DOCKER_IMAGE = 'naimatazmdev/assignment2'
         DOCKER_TAG = "${env.BUILD_NUMBER}"
     }
     

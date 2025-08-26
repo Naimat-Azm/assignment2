@@ -32,9 +32,18 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 script {
-                    // Use Node.js Docker container to run npm install
-                    // Mount the workspace directory directly
-                    sh 'docker run --rm -v $(pwd):/workspace -w /workspace node:18-alpine npm install'
+                    // Build Docker image directly which includes npm install
+                    sh '''
+                        echo "Building image with dependencies..."
+                        # Build the app image which runs npm install
+                        docker build -t temp-build-${BUILD_NUMBER} .
+                        
+                        # Extract node_modules from the built image
+                        CONTAINER_ID=$(docker create temp-build-${BUILD_NUMBER})
+                        docker cp $CONTAINER_ID:/app/node_modules ./node_modules || true
+                        docker rm $CONTAINER_ID
+                        docker rmi temp-build-${BUILD_NUMBER} || true
+                    '''
                 }
             }
         }

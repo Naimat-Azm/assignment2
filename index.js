@@ -6,7 +6,7 @@ const mongoose = require('mongoose');
 const app = express();
 const PORT = 3000;
 
-// MongoDB connection using environment variables
+// MongoDB connection using environment variables .
 const {
   MONGO_INITDB_ROOT_USERNAME,
   MONGO_INITDB_ROOT_PASSWORD,

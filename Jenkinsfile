@@ -166,14 +166,17 @@ pipeline {
     triggers {
         GenericTrigger(
             genericVariables: [
-                [key: 'ref', value: '$.ref']  // "refs/heads/main
+                [key: 'ref', value: '$.ref'],                        // push ref (e.g. refs/heads/develop)
+                [key: 'action', value: '$.action'],                  // PR action
+                [key: 'base_branch', value: '$.pull_request.base.ref'] // PR base branch
             ],
             causeString: 'Triggered by GitHub webhook',
             token: 'github-webhook-token',
-            regexpFilterText: '$ref',
-            regexpFilterExpression: 'refs/heads/main'
+            regexpFilterText: '$ref $action $base_branch',
+            regexpFilterExpression: '(refs/heads/develop)|(opened develop)|(synchronize develop)'
         )
     }
+
 
     
     stages {

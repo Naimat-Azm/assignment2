@@ -32,16 +32,9 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 script {
-                    // Use the jenkins container itself which has docker and can access the workspace
-                    sh '''
-                        # Install Node.js directly in Jenkins container for this build
-                        if ! command -v node >/dev/null 2>&1; then
-                            curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-                            apt-get update
-                            apt-get install -y nodejs
-                        fi
-                        npm install
-                    '''
+                    // Use Node.js Docker container to run npm install
+                    // Mount the workspace directory directly
+                    sh 'docker run --rm -v $(pwd):/workspace -w /workspace node:18-alpine npm install'
                 }
             }
         }
@@ -49,7 +42,7 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    sh 'npm test || echo "No tests found, skipping test stage"'
+                    sh 'docker run --rm -v $(pwd):/workspace -w /workspace node:18-alpine npm test || echo "No tests found, skipping test stage"'
                 }
             }
         }

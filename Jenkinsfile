@@ -32,7 +32,12 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 script {
-                    sh 'docker run --rm -v $PWD:/app -w /app node:18-alpine npm install'
+                    sh '''
+                        ls -la package.json
+                        cat package.json
+                        docker run --rm -v $PWD:/app -w /app node:18-alpine ls -la
+                        docker run --rm -v $PWD:/app -w /app node:18-alpine npm install
+                    '''
                 }
             }
         }

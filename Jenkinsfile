@@ -166,7 +166,7 @@ pipeline {
     triggers {
         GenericTrigger(
             genericVariables: [
-                [key: 'ref', value: '$.ref'],                        // push ref (e.g. refs/heads/develop)
+                [key: 'ref', value: '$.ref'],                        // push ref (e.g. refs/heads/develop) branch
                 [key: 'action', value: '$.action'],                  // PR action
                 [key: 'base_branch', value: '$.pull_request.base.ref'] // PR base branch
             ],

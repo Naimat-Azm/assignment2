@@ -14,8 +14,7 @@ pipeline {
             genericVariables: [
                 [key: 'ref', value: '$.ref'], // branch ref (e.g. refs/heads/develop)
                 [key: 'action', value: '$.action'], // PR action (e.g. opened, synchronize)
-                [key: 'base_branch', value: '$.pull_request.base.ref'] // target branch of PR ( e-g develop)
-            ],
+                [key: 'base_branch', value: '$.pull_request.base.ref'] // target branch of PR 
             causeString: 'Triggered by GitHub webhook',
             token: 'github-webhook-token',
             regexpFilterText: '$ref $action $base_branch',

@@ -35,7 +35,8 @@ pipeline {
 
                             def token
                             try {
-                                def parsedLogin = readJSON text: loginResponse
+                                // Parse JSON manually using Groovy (since readJSON is unavailable)
+                                def parsedLogin = groovy.json.JsonSlurperClassic().parseText(loginResponse)
                                 if (!parsedLogin.token) {
                                     error "No token received from Docker Hub login: ${loginResponse}"
                                 }
@@ -57,7 +58,8 @@ pipeline {
                             def latestTag = "v1.0.0"  // Fallback default
 
                             try {
-                                def parsed = readJSON text: tagsJson
+                                // Parse JSON manually using Groovy
+                                def parsed = groovy.json.JsonSlurperClassic().parseText(tagsJson)
                                 if (parsed?.results) {
                                     def tags = parsed.results*.name.findAll { it ==~ /^v\d+\.\d+\.\d+$/ }
                                     if (tags && tags.size() > 0) {
@@ -147,7 +149,7 @@ pipeline {
                     withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
                         sh '''
                             echo "$PASS" | docker login -u "$USER" --password-stdin
-                            docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
+                            docker push "${DOCKER_IMAGE}:${DOCKER_TAG}"
                             docker logout
                         '''
                     }
@@ -159,39 +161,38 @@ pipeline {
     post {
         success {
             script {
-                def message = "✅ Jenkins Pipeline SUCCESS\\n" +
-                              "Repository: ${env.JOB_NAME}\\n" +
-                              "Build: #${env.BUILD_NUMBER}\\n" +
-                              "Docker Image: ${DOCKER_IMAGE}:${env.DOCKER_TAG}\\n" +
-                              "Duration: ${currentBuild.durationString}"
-
+                def message = """\
+                    {"text": "✅ Jenkins Pipeline SUCCESS\\nRepository: ${env.JOB_NAME}\\nBuild: #${env.BUILD_NUMBER}\\nDocker Image: ${DOCKER_IMAGE}:${env.DOCKER_TAG}\\nDuration: ${currentBuild.durationString}"}
+                """
                 sh """
                     curl -X POST -H 'Content-type: application/json' \
-                    --data '{"text": "${message}"}' \
-                    ${SLACK_WEBHOOK}
+                    --data '${message}' \
+                    "${SLACK_WEBHOOK}"
                 """
             }
         }
 
         failure {
             script {
-                def message = "❌ Jenkins Pipeline FAILED\\n" +
-                              "Repository: ${env.JOB_NAME}\\n" +
-                              "Build: #${env.BUILD_NUMBER}\\n" +
-                              "Duration: ${currentBuild.durationString}"
-
+                def message = """\
+                    {"text": "❌ Jenkins Pipeline FAILED\\nRepository: ${env.JOB_NAME}\\nBuild: #${env.BUILD_NUMBER}\\nDuration: ${currentBuild.durationString}"}
+                """
                 sh """
                     curl -X POST -H 'Content-type: application/json' \
-                    --data '{"text": "${message}"}' \
-                    ${SLACK_WEBHOOK}
+                    --data '${message}' \
+                    "${SLACK_WEBHOOK}"
                 """
             }
         }
 
         always {
             script {
-                sh "docker rmi ${DOCKER_IMAGE}:${env.DOCKER_TAG} || true"
-                sh "docker rmi ${DOCKER_IMAGE}:latest || true"
+                if (env.DOCKER_TAG) {
+                    sh "docker rmi ${DOCKER_IMAGE}:${env.DOCKER_TAG} || true"
+                    sh "docker rmi ${DOCKER_IMAGE}:latest || true"
+                } else {
+                    echo "No DOCKER_TAG set, skipping image cleanup."
+                }
             }
         }
     }

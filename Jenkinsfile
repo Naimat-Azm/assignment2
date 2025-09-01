@@ -20,7 +20,7 @@ pipeline {
                         env.FINAL_TAG = params.DOCKER_TAG
                     } else {
                         // Fetch the latest tag from the registry
-                        def latestTag = sh(script: "docker images --format '{{.Tag}}' | grep -E '^v[0-9]+\\.[0-9]+\\.[0-9]+$' | sort -V | tail -n 1", returnStdout: true).trim()
+                        def latestTag = sh(script: "docker images --format '{{.Tag}}' | grep -E '^v[0-9]+\\.[0-9]+\\.[0-9]+\\\$' | sort -V | tail -n 1", returnStdout: true).trim()
                         if (latestTag) {
                             def parts = latestTag.tokenize('.')
                             parts[-1] = (parts[-1].toInteger() + 1).toString()

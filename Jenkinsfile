@@ -1,111 +1,44 @@
 pipeline {
     agent any
-
-    parameters {
-        string(
-            name: 'DOCKER_TAG',
-            defaultValue: '',
-            description: 'Optional: Enter Docker image tag (e.g., v1.0.5). Leave empty for auto-increment.'
-        )
-    }
-
+    
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         SLACK_WEBHOOK = credentials('slack-webhook-url')
         DOCKER_IMAGE = 'naimatazmdev/demoapp'
+        DOCKER_TAG = "${env.BUILD_NUMBER}"
     }
-
+    
+    triggers {
+        GenericTrigger(
+            genericVariables: [
+                [key: 'ref', value: '$.ref'],
+                [key: 'action', value: '$.action'],
+                [key: 'base_branch', value: '$.pull_request.base.ref']
+            ],
+            causeString: 'Triggered by GitHub webhook',
+            token: 'github-webhook-token',
+            regexpFilterText: '$ref $action $base_branch',
+            regexpFilterExpression: '(refs/heads/develop|opened|synchronize.*develop)'
+        )
+    }
+    
     stages {
-        stage('Set Docker Tag') {
-            steps {
-                script {
-                    if (!params.DOCKER_TAG?.trim()) {
-                        echo "No tag provided, fetching latest from DockerHub..."
-
-                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-                            // Login to Docker Hub to get JWT token
-                            def loginResponse = sh(
-                                script: """
-                                    curl -s -H "Content-Type: application/json" -X POST \
-                                    -d '{"username":"${USER}","password":"${PASS}"}' \
-                                    https://hub.docker.com/v2/users/login/
-                                """,
-                                returnStdout: true
-                            ).trim()
-
-                            def token
-                            try {
-                                // Parse JSON manually using Groovy (since readJSON is unavailable)
-                                def parsedLogin = groovy.json.JsonSlurperClassic().parseText(loginResponse)
-                                if (!parsedLogin.token) {
-                                    error "No token received from Docker Hub login: ${loginResponse}"
-                                }
-                                token = parsedLogin.token
-                                echo "Successfully obtained auth token."
-                            } catch (Exception e) {
-                                error "Failed to login to Docker Hub: ${e.message}. Response: ${loginResponse}"
-                            }
-
-                            // Fetch tags using the token
-                            def tagsJson = sh(
-                                script: """
-                                    curl -s -H "Authorization: Bearer ${token}" \
-                                    "https://hub.docker.com/v2/repositories/${DOCKER_IMAGE}/tags/?page_size=100"
-                                """,
-                                returnStdout: true
-                            ).trim()
-
-                            def latestTag = "v1.0.0"  // Fallback default
-
-                            try {
-                                // Parse JSON manually using Groovy
-                                def parsed = groovy.json.JsonSlurperClassic().parseText(tagsJson)
-                                if (parsed?.results) {
-                                    def tags = parsed.results*.name.findAll { it ==~ /^v\d+\.\d+\.\d+$/ }
-                                    if (tags && tags.size() > 0) {
-                                        tags = tags.sort { a, b ->
-                                            def va = a.replace('v', '').split('\\.').collect { it as int }
-                                            def vb = b.replace('v', '').split('\\.').collect { it as int }
-                                            va <=> vb
-                                        }
-                                        latestTag = tags.last()
-                                        echo "Latest tag found on DockerHub: ${latestTag}"
-                                    } else {
-                                        echo "No valid semantic version tags found, using default: ${latestTag}"
-                                    }
-                                } else {
-                                    echo "No results in tags response, using default: ${latestTag}"
-                                }
-                            } catch (Exception e) {
-                                echo "Failed to parse tags JSON: ${e.message}. Using default: ${latestTag}"
-                            }
-
-                            def parts = latestTag.replace("v", "").split("\\.")
-                            def newTag = "v${parts[0]}.${parts[1]}.${parts[2].toInteger() + 1}"
-
-                            env.DOCKER_TAG = newTag
-                            echo "Auto-incremented tag: ${env.DOCKER_TAG}"
-                        }
-                    } else {
-                        env.DOCKER_TAG = params.DOCKER_TAG
-                        echo "Using provided tag: ${env.DOCKER_TAG}"
-                    }
-                }
-            }
-        }
-
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
-
+        
         stage('Install Dependencies') {
             steps {
                 script {
+                    // Build Docker image directly which includes npm install
                     sh '''
                         echo "Building image with dependencies..."
+                        # Build the app image which runs npm install
                         docker build -t temp-build-${BUILD_NUMBER} .
+                        
+                        # Extract node_modules from the built image
                         CONTAINER_ID=$(docker create temp-build-${BUILD_NUMBER})
                         docker cp $CONTAINER_ID:/app/node_modules ./node_modules || true
                         docker rm $CONTAINER_ID
@@ -114,7 +47,7 @@ pipeline {
                 }
             }
         }
-
+        
         stage('Run Tests') {
             steps {
                 script {
@@ -122,77 +55,99 @@ pipeline {
                 }
             }
         }
-
+        
         stage('Run Migrations') {
             steps {
                 script {
                     sh '''
                         echo "Running database migrations..."
+                        # Since no migration scripts exist, we'll create a placeholder
+                        # In a real scenario, you would run your migration command here
+                        # For MongoDB with Mongoose, this could be:
+                        # npm run migrate
                         echo "Migration completed successfully"
                     '''
                 }
             }
         }
-
+        
         stage('Build Docker Image') {
             steps {
                 script {
-                    sh "docker build -t ${DOCKER_IMAGE}:${env.DOCKER_TAG} ."
-                    sh "docker tag ${DOCKER_IMAGE}:${env.DOCKER_TAG} ${DOCKER_IMAGE}:latest"
+                    sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
+                    sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest"
                 }
             }
         }
-
+        
         stage('Push to DockerHub') {
             steps {
                 script {
-                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-                        sh '''
-                            echo "$PASS" | docker login -u "$USER" --password-stdin
-                            docker push "${DOCKER_IMAGE}:${DOCKER_TAG}"
-                            docker logout
-                        '''
-                    }
+                    sh "echo \$DOCKERHUB_CREDENTIALS_PSW | docker login -u \$DOCKERHUB_CREDENTIALS_USR --password-stdin"
+                    sh "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                    // sh "docker push ${DOCKER_IMAGE}:latest"
+                    sh "docker logout"
                 }
             }
         }
     }
-
+    
     post {
         success {
             script {
-                def message = """\
-                    {"text": "✅ Jenkins Pipeline SUCCESS\\nRepository: ${env.JOB_NAME}\\nBuild: #${env.BUILD_NUMBER}\\nDocker Image: ${DOCKER_IMAGE}:${env.DOCKER_TAG}\\nDuration: ${currentBuild.durationString}"}
-                """
+                def message = ""
+                if (env.CHANGE_ID) {
+                    message = "✅ Jenkins Pipeline SUCCESS for PR #${env.CHANGE_ID} to develop branch\\n" +
+                             "Repository: ${env.JOB_NAME}\\n" +
+                             "Build: #${env.BUILD_NUMBER}\\n" +
+                             "Branch: ${env.CHANGE_BRANCH}\\n" +
+                             "Target: ${env.CHANGE_TARGET}\\n" +
+                             "Duration: ${currentBuild.durationString}"
+                } else {
+                    message = "✅ Jenkins Pipeline SUCCESS\\n" +
+                             "Repository: ${env.JOB_NAME}\\n" +
+                             "Build: #${env.BUILD_NUMBER}\\n" +
+                             "Docker Image: ${DOCKER_IMAGE}:${DOCKER_TAG}\\n" +
+                             "Duration: ${currentBuild.durationString}"
+                }
+                
                 sh """
-                    curl -X POST -H 'Content-type: application/json' \
-                    --data '${message}' \
-                    "${SLACK_WEBHOOK}"
+                    curl -X POST -H 'Content-type: application/json' \\
+                    --data '{"text": "${message}"}' \\
+                    \${SLACK_WEBHOOK}
                 """
             }
         }
-
+        
         failure {
             script {
-                def message = """\
-                    {"text": "❌ Jenkins Pipeline FAILED\\nRepository: ${env.JOB_NAME}\\nBuild: #${env.BUILD_NUMBER}\\nDuration: ${currentBuild.durationString}"}
-                """
+                def message = ""
+                if (env.CHANGE_ID) {
+                    message = "❌ Jenkins Pipeline FAILED for PR #${env.CHANGE_ID} to develop branch\\n" +
+                             "Repository: ${env.JOB_NAME}\\n" +
+                             "Build: #${env.BUILD_NUMBER}\\n" +
+                             "Branch: ${env.CHANGE_BRANCH}\\n" +
+                             "Target: ${env.CHANGE_TARGET}\\n" +
+                             "Duration: ${currentBuild.durationString}"
+                } else {
+                    message = "❌ Jenkins Pipeline FAILED\\n" +
+                             "Repository: ${env.JOB_NAME}\\n" +
+                             "Build: #${env.BUILD_NUMBER}\\n" +
+                             "Duration: ${currentBuild.durationString}"
+                }
+                
                 sh """
-                    curl -X POST -H 'Content-type: application/json' \
-                    --data '${message}' \
-                    "${SLACK_WEBHOOK}"
+                    curl -X POST -H 'Content-type: application/json' \\
+                    --data '{"text": "${message}"}' \\
+                    \${SLACK_WEBHOOK}
                 """
             }
         }
-
+        
         always {
             script {
-                if (env.DOCKER_TAG) {
-                    sh "docker rmi ${DOCKER_IMAGE}:${env.DOCKER_TAG} || true"
-                    sh "docker rmi ${DOCKER_IMAGE}:latest || true"
-                } else {
-                    echo "No DOCKER_TAG set, skipping image cleanup."
-                }
+                sh "docker rmi ${DOCKER_IMAGE}:${DOCKER_TAG} || true"
+                sh "docker rmi ${DOCKER_IMAGE}:latest || true"
             }
         }
     }

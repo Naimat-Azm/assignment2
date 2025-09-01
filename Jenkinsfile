@@ -1,5 +1,3 @@
-// Jenkinsfile (Declarative Pipeline)
-
 pipeline {
     agent any
 
@@ -21,69 +19,64 @@ pipeline {
         stage('Set Docker Tag') {
             steps {
                 script {
-                    if (params.DOCKER_TAG?.trim()) {
-                        // Use the provided tag if the parameter is not empty
-                        env.DOCKER_TAG = params.DOCKER_TAG
-                        echo "Using provided tag: ${env.DOCKER_TAG}"
-                    } else {
-                        // Auto-increment the tag
-                        echo "No tag provided, fetching latest from DockerHub for auto-increment..."
-                        def latestTag = "v1.0.0" // Fallback default
-                        def tagsJson = ''
+                    if (!params.DOCKER_TAG?.trim()) {
+                        echo "No tag provided, fetching latest from DockerHub..."
 
-                        try {
-                            // Use withCredentials to get DockerHub credentials for the curl command
-                            withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-                                // Use sh with the returnStatus option to check for errors
-                                def curlResult = sh(
-                                    script: "curl -s -u \"${USER}:${PASS}\" \"https://hub.docker.com/v2/repositories/${DOCKER_IMAGE}/tags?page_size=100\"",
-                                    returnStdout: true,
-                                    returnStatus: true
-                                )
+                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                            // First, login to get auth token
+                            def loginResponse = sh(
+                                script: '''
+                                    curl -s -H "Content-Type: application/json" -X POST -d \'{"username":"\'"$USER"\'", "password":"\'"$PASS"\'"}\' https://hub.docker.com/v2/users/login/
+                                ''',
+                                returnStdout: true
+                            ).trim()
 
-                                if (curlResult.status == 0) {
-                                    tagsJson = curlResult.stdout
-                                } else {
-                                    error("Failed to retrieve tags from DockerHub. cURL command returned status ${curlResult.status}")
-                                }
-                            }
-                        } catch (Exception e) {
-                            echo "Error fetching tags from DockerHub: ${e.message}. Using default tag: ${latestTag}"
-                        }
-
-                        if (tagsJson) {
+                            def token
                             try {
-                                def parsed = readJSON(text: tagsJson)
-                                if (parsed?.results) {
-                                    def validTags = parsed.results*.name.findAll { it ==~ /^v\\d+\\.\\d+\\.\\d+$/ }
+                                def parsedLogin = readJSON text: loginResponse
+                                token = parsedLogin.token
+                                echo "Successfully obtained auth token."
+                            } catch (Exception e) {
+                                error "Failed to login to Docker Hub: ${e.message}"
+                            }
 
-                                    if (validTags) {
-                                        // Sort tags using Groovy's natural sort for version numbers
-                                        validTags = validTags.sort { a, b ->
+                            // Now, fetch tags using the token
+                            def tagsJson = sh(
+                                script: """
+                                    curl -s -H "Authorization: Bearer ${token}" "https://hub.docker.com/v2/repositories/${DOCKER_IMAGE}/tags/?page_size=100"
+                                """,
+                                returnStdout: true
+                            ).trim()
+
+                            def latestTag = "v1.0.0"  // fallback default
+
+                            try {
+                                def parsed = readJSON text: tagsJson
+                                if (parsed?.results) {
+                                    def tags = parsed.results*.name.findAll { it ==~ /^v\\d+\\.\\d+\\.\\d+$/ }
+                                    if (tags && tags.size() > 0) {
+                                        tags = tags.sort { a, b ->
                                             def va = a.replace('v','').split('\\.').collect { it as int }
                                             def vb = b.replace('v','').split('\\.').collect { it as int }
                                             return va <=> vb
                                         }
-                                        latestTag = validTags.last()
+                                        latestTag = tags.last()
                                         echo "Latest tag found on DockerHub: ${latestTag}"
-                                    } else {
-                                        echo "No valid version tags (vX.Y.Z) found. Using default tag: ${latestTag}"
                                     }
                                 }
                             } catch (Exception e) {
-                                echo "Failed to parse tags JSON. The repository might be empty or the API response is invalid. Using default tag: ${latestTag}"
+                                echo "Failed to parse tags JSON: ${e.message}. Using default v1.0.0"
                             }
-                        } else {
-                            echo "Empty response from DockerHub API. Using default tag: ${latestTag}"
+
+                            def parts = latestTag.replace("v", "").split("\\.")
+                            def newTag = "v${parts[0]}.${parts[1]}.${parts[2].toInteger() + 1}"
+
+                            env.DOCKER_TAG = newTag
+                            echo "Auto-incremented tag: ${env.DOCKER_TAG}"
                         }
-
-                        // Increment the patch version number
-                        def parts = latestTag.replace("v", "").split("\\.")
-                        def newPatch = parts[2].toInteger() + 1
-                        def newTag = "v${parts[0]}.${parts[1]}.${newPatch}"
-
-                        env.DOCKER_TAG = newTag
-                        echo "Auto-incremented new tag: ${env.DOCKER_TAG}"
+                    } else {
+                        env.DOCKER_TAG = params.DOCKER_TAG
+                        echo "Using provided tag: ${env.DOCKER_TAG}"
                     }
                 }
             }
@@ -132,8 +125,8 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
-                    sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest"
+                    sh "docker build -t ${DOCKER_IMAGE}:${env.DOCKER_TAG} ."
+                    sh "docker tag ${DOCKER_IMAGE}:${env.DOCKER_TAG} ${DOCKER_IMAGE}:latest"
                 }
             }
         }
@@ -145,7 +138,6 @@ pipeline {
                         sh '''
                             echo "$PASS" | docker login -u "$USER" --password-stdin
                             docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
-                            docker push ${DOCKER_IMAGE}:latest
                             docker logout
                         '''
                     }
@@ -157,29 +149,38 @@ pipeline {
     post {
         success {
             script {
-                def message = "✅ Jenkins Pipeline SUCCESS\n" +
-                              "Repository: ${env.JOB_NAME}\n" +
-                              "Build: #${env.BUILD_NUMBER}\n" +
-                              "Docker Image: ${DOCKER_IMAGE}:${DOCKER_TAG}\n" +
+                def message = "✅ Jenkins Pipeline SUCCESS\\n" +
+                              "Repository: ${env.JOB_NAME}\\n" +
+                              "Build: #${env.BUILD_NUMBER}\\n" +
+                              "Docker Image: ${DOCKER_IMAGE}:${env.DOCKER_TAG}\\n" +
                               "Duration: ${currentBuild.durationString}"
 
-                sh(script: "curl -X POST -H 'Content-type: application/json' --data '{\"text\": \"${message}\"}' ${SLACK_WEBHOOK}", returnStatus: true)
+                sh """
+                    curl -X POST -H 'Content-type: application/json' \
+                    --data '{"text": "${message}"}' \
+                    ${SLACK_WEBHOOK}
+                """
             }
         }
+
         failure {
             script {
-                def message = "❌ Jenkins Pipeline FAILED\n" +
-                              "Repository: ${env.JOB_NAME}\n" +
-                              "Build: #${env.BUILD_NUMBER}\n" +
+                def message = "❌ Jenkins Pipeline FAILED\\n" +
+                              "Repository: ${env.JOB_NAME}\\n" +
+                              "Build: #${env.BUILD_NUMBER}\\n" +
                               "Duration: ${currentBuild.durationString}"
 
-                sh(script: "curl -X POST -H 'Content-type: application/json' --data '{\"text\": \"${message}\"}' ${SLACK_WEBHOOK}", returnStatus: true)
+                sh """
+                    curl -X POST -H 'Content-type: application/json' \
+                    --data '{"text": "${message}"}' \
+                    ${SLACK_WEBHOOK}
+                """
             }
         }
+
         always {
             script {
-                // Remove images to save space. Use || true to prevent failure if the images don't exist.
-                sh "docker rmi ${DOCKER_IMAGE}:${DOCKER_TAG} || true"
+                sh "docker rmi ${DOCKER_IMAGE}:${env.DOCKER_TAG} || true"
                 sh "docker rmi ${DOCKER_IMAGE}:latest || true"
             }
         }

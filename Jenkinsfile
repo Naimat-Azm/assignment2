@@ -161,7 +161,7 @@ pipeline {
         string(
             name: 'DOCKER_TAG',
             defaultValue: '',
-            description: 'Enter Docker image tag (leave empty to auto-increment last digit)'
+            description: 'Enter Docker image tag (leave empty to auto-increment last digit, e.g., v1.0.0 → v1.0.1)'
         )
     }
 
@@ -179,7 +179,6 @@ pipeline {
                         echo "No tag provided, fetching latest from DockerHub..."
 
                         withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-                            // Fetch tags from DockerHub API
                             def tagsJson = sh(
                                 script: """
                                     curl -s -u $USER:$PASS https://hub.docker.com/v2/repositories/${DOCKER_IMAGE}/tags?page_size=100
@@ -189,11 +188,13 @@ pipeline {
 
                             def tags = []
                             try {
-                                tags = readJSON text: tagsJson
-                                tags = tags.results*.name.findAll { it ==~ /^v\\d+\\.\\d+\\.\\d+\$/ }
+                                def parsed = readJSON text: tagsJson
+                                tags = parsed.results*.name.findAll { it ==~ /^v\\d+\\.\\d+\\.\\d+\$/ }
+
+                                // Sort tags numerically
                                 tags = tags.sort { a, b ->
-                                    def va = a.replace('v','').split('\\.')*.toInteger()
-                                    def vb = b.replace('v','').split('\\.')*.toInteger()
+                                    def va = a.replace('v','').split('\\.').collect { it as int }
+                                    def vb = b.replace('v','').split('\\.').collect { it as int }
                                     return va <=> vb
                                 }
                             } catch (Exception e) {
@@ -226,37 +227,45 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
-                sh '''
-                    echo "Building image with dependencies..."
-                    docker build -t temp-build-${BUILD_NUMBER} .
-                    
-                    CONTAINER_ID=$(docker create temp-build-${BUILD_NUMBER})
-                    docker cp $CONTAINER_ID:/app/node_modules ./node_modules || true
-                    docker rm $CONTAINER_ID
-                    docker rmi temp-build-${BUILD_NUMBER} || true
-                '''
+                script {
+                    sh '''
+                        echo "Building image with dependencies..."
+                        docker build -t temp-build-${BUILD_NUMBER} .
+                        
+                        CONTAINER_ID=$(docker create temp-build-${BUILD_NUMBER})
+                        docker cp $CONTAINER_ID:/app/node_modules ./node_modules || true
+                        docker rm $CONTAINER_ID
+                        docker rmi temp-build-${BUILD_NUMBER} || true
+                    '''
+                }
             }
         }
 
         stage('Run Tests') {
             steps {
-                sh 'docker run --rm -v $(pwd):/workspace -w /workspace node:18-alpine npm test || echo "No tests found, skipping test stage"'
+                script {
+                    sh 'docker run --rm -v $(pwd):/workspace -w /workspace node:18-alpine npm test || echo "No tests found, skipping test stage"'
+                }
             }
         }
 
         stage('Run Migrations') {
             steps {
-                sh '''
-                    echo "Running database migrations..."
-                    echo "Migration completed successfully"
-                '''
+                script {
+                    sh '''
+                        echo "Running database migrations..."
+                        echo "Migration completed successfully"
+                    '''
+                }
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
-                sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest"
+                script {
+                    sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
+                    sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest"
+                }
             }
         }
 

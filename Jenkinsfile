@@ -2,17 +2,13 @@ pipeline {
     agent any
 
     parameters {
-        string(
-            name: 'DOCKER_TAG',
-            defaultValue: '',
-            description: 'Optional: Enter Docker image tag (e.g., v1.0.5). Leave empty for auto-increment.'
-        )
+        string(name: 'DOCKER_TAG', defaultValue: '', description: 'Custom Docker tag (leave empty for auto-increment)')
     }
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
-        SLACK_WEBHOOK = credentials('slack-webhook-url')
-        DOCKER_IMAGE = 'naimatazmdev/demoapp'
+        SLACK_WEBHOOK         = credentials('slack-webhook-url')
+        DOCKER_IMAGE          = 'naimatazmdev/demoapp'
     }
 
     stages {
@@ -30,12 +26,15 @@ pipeline {
                                 returnStdout: true
                             ).trim()
 
-                            def latestTag = "v1.0.0"  // fallback default
+                            def latestTag = "v1.0.0" // fallback default
 
-                            try {
-                                def parsed = readJSON text: tagsJson
-                                if (parsed?.results) {
+                            if (!tagsJson || tagsJson.startsWith("<")) {
+                                echo "⚠️ DockerHub returned invalid response (check credentials/repo). Defaulting to v1.0.0"
+                            } else {
+                                try {
+                                    def parsed = readJSON text: tagsJson
                                     def tags = parsed.results*.name.findAll { it ==~ /^v\\d+\\.\\d+\\.\\d+$/ }
+
                                     if (tags && tags.size() > 0) {
                                         tags = tags.sort { a, b ->
                                             def va = a.replace('v','').split('\\.').collect { it as int }
@@ -44,10 +43,12 @@ pipeline {
                                         }
                                         latestTag = tags.last()
                                         echo "Latest tag found on DockerHub: ${latestTag}"
+                                    } else {
+                                        echo "⚠️ No valid version tags found. Starting fresh at v1.0.0"
                                     }
+                                } catch (Exception e) {
+                                    echo "⚠️ Failed to parse DockerHub response, using fallback v1.0.0"
                                 }
-                            } catch (Exception e) {
-                                echo "Failed to parse tags JSON, using default v1.0.0"
                             }
 
                             def parts = latestTag.replace("v", "").split("\\.")
@@ -116,13 +117,9 @@ pipeline {
         stage('Push to DockerHub') {
             steps {
                 script {
-                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-                        sh '''
-                            echo "$PASS" | docker login -u "$USER" --password-stdin
-                            docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
-                            docker logout
-                        '''
-                    }
+                    sh "echo \$DOCKERHUB_CREDENTIALS_PSW | docker login -u \$DOCKERHUB_CREDENTIALS_USR --password-stdin"
+                    sh "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                    sh "docker logout"
                 }
             }
         }
@@ -140,7 +137,7 @@ pipeline {
                 sh """
                     curl -X POST -H 'Content-type: application/json' \
                     --data '{"text": "${message}"}' \
-                    ${SLACK_WEBHOOK}
+                    \${SLACK_WEBHOOK}
                 """
             }
         }
@@ -155,7 +152,7 @@ pipeline {
                 sh """
                     curl -X POST -H 'Content-type: application/json' \
                     --data '{"text": "${message}"}' \
-                    ${SLACK_WEBHOOK}
+                    \${SLACK_WEBHOOK}
                 """
             }
         }

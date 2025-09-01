@@ -281,322 +281,6 @@
 
 
 
-// pipeline {
-//     agent any
-    
-//     environment {
-//         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
-//         SLACK_WEBHOOK = credentials('slack-webhook-url')
-//         DOCKER_IMAGE = 'naimatazmdev/demoapp'
-//         DOCKER_TAG = "${env.BUILD_NUMBER}"
-//     }
-    
-//     triggers {
-//         GenericTrigger(
-//             genericVariables: [
-//                 [key: 'ref', value: '$.ref'],
-//                 [key: 'action', value: '$.action'],
-//                 [key: 'base_branch', value: '$.pull_request.base.ref']
-//             ],
-//             causeString: 'Triggered by GitHub webhook',
-//             token: 'github-webhook-token',
-//             regexpFilterText: '$ref $action $base_branch',
-//             regexpFilterExpression: '(refs/heads/develop|refs/heads/main|opened|synchronize.*(develop|main))'
-//         )
-//     }
-    
-//     stages {
-//         stage('Checkout') {
-//             steps {
-//                 checkout scm
-//                 script {
-//                     echo "=== BUILD INFORMATION ==="
-//                     echo "Build Number: ${env.BUILD_NUMBER}"
-//                     echo "Branch: ${env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'unknown'}"
-//                     echo "Docker Tag: ${env.DOCKER_TAG}"
-//                     echo "Build URL: ${env.BUILD_URL}"
-//                     echo "Job Name: ${env.JOB_NAME}"
-//                     echo "========================="
-//                 }
-//             }
-//         }
-        
-//         stage('Notify Build Start') {
-//             steps {
-//                 script {
-//                     def branchName = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'unknown').replace('origin/', '')
-//                     def ticketNo = "SHEFA2-3030"  // Hardcoded for demo - extract from branch in production
-                    
-//                     def message = """
-//                     {
-//                         "text": "Build Started ⚙️",
-//                         "attachments": [
-//                             {
-//                                 "color": "#439FE0",
-//                                 "fields": [
-//                                     {
-//                                         "title": "Pipeline",
-//                                         "value": "<${env.BUILD_URL}|${env.JOB_NAME}/Docker-Build-Backend>",
-//                                         "short": true
-//                                     },
-//                                     {
-//                                         "title": "Build",
-//                                         "value": "#${env.BUILD_NUMBER}",
-//                                         "short": true
-//                                     },
-//                                     {
-//                                         "title": "Branch",
-//                                         "value": "${branchName}",
-//                                         "short": true
-//                                     },
-//                                     {
-//                                         "title": "Ticket No",
-//                                         "value": "${ticketNo}",
-//                                         "short": true
-//                                     },
-//                                     {
-//                                         "title": "Triggered By",
-//                                         "value": "Naimat",
-//                                         "short": false
-//                                     }
-//                                 ]
-//                             }
-//                         ]
-//                     }
-//                     """
-                    
-//                     sh """
-//                         curl -X POST -H 'Content-type: application/json' \\
-//                         --data '${message}' \\
-//                         \${SLACK_WEBHOOK}
-//                     """
-//                 }
-//             }
-//         }
-        
-//         stage('Install Dependencies') {
-//             steps {
-//                 script {
-//                     sh '''
-//                         echo "Building image with dependencies..."
-//                         docker build -t temp-build-${BUILD_NUMBER} .
-                        
-//                         CONTAINER_ID=$(docker create temp-build-${BUILD_NUMBER})
-//                         docker cp $CONTAINER_ID:/app/node_modules ./node_modules 2>/dev/null || echo "No node_modules to extract"
-//                         docker rm $CONTAINER_ID
-//                         docker rmi temp-build-${BUILD_NUMBER} || true
-//                     '''
-//                 }
-//             }
-//         }
-        
-//         stage('Run Tests') {
-//             steps {
-//                 script {
-//                     sh 'docker run --rm -v $(pwd):/workspace -w /workspace node:18-alpine npm test || echo "No tests found, skipping test stage"'
-//                 }
-//             }
-//         }
-        
-//         stage('Run Migrations') {
-//             steps {
-//                 script {
-//                     sh '''
-//                         echo "Running database migrations..."
-//                         echo "Migration completed successfully"
-//                     '''
-//                 }
-//             }
-//         }
-        
-//         stage('Build Docker Image') {
-//             steps {
-//                 script {
-//                     sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
-//                     sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest"
-//                 }
-//             }
-//         }
-        
-//         stage('Push to DockerHub') {
-//             steps {
-//                 script {
-//                     sh "echo \$DOCKERHUB_CREDENTIALS_PSW | docker login -u \$DOCKERHUB_CREDENTIALS_USR --password-stdin"
-//                     sh "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
-//                     sh "docker logout"
-                    
-//                     // Send deployment notification
-//                     def branchName = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'unknown').replace('origin/', '')
-//                     def formattedTag = "v0.1.${env.BUILD_NUMBER}-${branchName}"
-                    
-//                     def deployMessage = """
-//                     {
-//                         "text": "Deployment tag updated successfully 🚀",
-//                         "attachments": [
-//                             {
-//                                 "color": "#36a64f",
-//                                 "fields": [
-//                                     {
-//                                         "title": "Pipeline",
-//                                         "value": "<${env.BUILD_URL}|${env.JOB_NAME}/Deploy-Backend-Development>",
-//                                         "short": true
-//                                     },
-//                                     {
-//                                         "title": "Tag",
-//                                         "value": "${formattedTag}",
-//                                         "short": true
-//                                     },
-//                                     {
-//                                         "title": "Environment",
-//                                         "value": "dev",
-//                                         "short": true
-//                                     },
-//                                     {
-//                                         "title": "Triggered By",
-//                                         "value": "Naimat",
-//                                         "short": true
-//                                     }
-//                                 ]
-//                             }
-//                         ]
-//                     }
-//                     """
-                    
-//                     sh """
-//                         curl -X POST -H 'Content-type: application/json' \\
-//                         --data '${deployMessage}' \\
-//                         \${SLACK_WEBHOOK}
-//                     """
-//                 }
-//             }
-//         }
-//     }
-    
-//     post {
-//         success {
-//             script {
-//                 def branchName = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'unknown').replace('origin/', '')
-//                 def formattedTag = "v0.1.${env.BUILD_NUMBER}-${branchName}"
-//                 def ticketNo = "SHEFA2-3030"  // Hardcoded for demo
-                
-//                 def successMessage = """
-//                 {
-//                     "text": "Build completed successfully 🔥",
-//                     "attachments": [
-//                         {
-//                             "color": "#36a64f",
-//                             "fields": [
-//                                 {
-//                                     "title": "Pipeline",
-//                                     "value": "<${env.BUILD_URL}|${env.JOB_NAME}/Docker-Build-Backend>",
-//                                     "short": true
-//                                 },
-//                                 {
-//                                     "title": "Tag",
-//                                     "value": "${formattedTag}",
-//                                     "short": true
-//                                 },
-//                                 {
-//                                     "title": "Branch",
-//                                     "value": "${branchName}",
-//                                     "short": true
-//                                 },
-//                                 {
-//                                     "title": "Ticket No",
-//                                     "value": "${ticketNo}",
-//                                     "short": true
-//                                 },
-//                                 {
-//                                     "title": "Triggered By",
-//                                     "value": "Naimat",
-//                                     "short": true
-//                                 },
-//                                 {
-//                                     "title": "Duration",
-//                                     "value": "${currentBuild.durationString}",
-//                                     "short": true
-//                                 }
-//                             ]
-//                         }
-//                     ]
-//                 }
-//                 """
-                
-//                 sh """
-//                     curl -X POST -H 'Content-type: application/json' \\
-//                     --data '${successMessage}' \\
-//                     \${SLACK_WEBHOOK}
-//                 """
-//             }
-//         }
-        
-//         failure {
-//             script {
-//                 def branchName = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'unknown').replace('origin/', '')
-//                 def ticketNo = "SHEFA2-3030"  // Hardcoded for demo
-                
-//                 def failureMessage = """
-//                 {
-//                     "text": "Build failed ❌",
-//                     "attachments": [
-//                         {
-//                             "color": "#ff0000",
-//                             "fields": [
-//                                 {
-//                                     "title": "Pipeline",
-//                                     "value": "<${env.BUILD_URL}|${env.JOB_NAME}/Docker-Build-Backend>",
-//                                     "short": true
-//                                 },
-//                                 {
-//                                     "title": "Build",
-//                                     "value": "#${env.BUILD_NUMBER}",
-//                                     "short": true
-//                                 },
-//                                 {
-//                                     "title": "Branch",
-//                                     "value": "${branchName}",
-//                                     "short": true
-//                                 },
-//                                 {
-//                                     "title": "Ticket No",
-//                                     "value": "${ticketNo}",
-//                                     "short": true
-//                                 },
-//                                 {
-//                                     "title": "Triggered By",
-//                                     "value": "Naimat",
-//                                     "short": true
-//                                 },
-//                                 {
-//                                     "title": "Duration",
-//                                     "value": "${currentBuild.durationString}",
-//                                     "short": true
-//                                 }
-//                             ]
-//                         }
-//                     ]
-//                 }
-//                 """
-                
-//                 sh """
-//                     curl -X POST -H 'Content-type: application/json' \\
-//                     --data '${failureMessage}' \\
-//                     \${SLACK_WEBHOOK}
-//                 """
-//             }
-//         }
-        
-//         always {
-//             script {
-//                 sh "docker rmi ${DOCKER_IMAGE}:${DOCKER_TAG} || true"
-//                 sh "docker rmi ${DOCKER_IMAGE}:latest || true"
-//             }
-//         }
-//     }
-// }
-
-
-
 pipeline {
     agent any
     
@@ -605,6 +289,10 @@ pipeline {
         SLACK_WEBHOOK = credentials('slack-webhook-url')
         DOCKER_IMAGE = 'naimatazmdev/demoapp'
         DOCKER_TAG = "${env.BUILD_NUMBER}"
+        // Add these for better tracking
+        JIRA_TICKET = extractJiraTicket()
+        TRIGGERED_BY = "${env.BUILD_USER ?: 'System'}"
+        ENVIRONMENT = determineEnvironment()
     }
     
     triggers {
@@ -617,76 +305,22 @@ pipeline {
             causeString: 'Triggered by GitHub webhook',
             token: 'github-webhook-token',
             regexpFilterText: '$ref $action $base_branch',
-            regexpFilterExpression: '(refs/heads/develop|refs/heads/main|opened|synchronize.*(develop|main))'
+            regexpFilterExpression: '(refs/heads/develop|opened|synchronize.*develop)'
         )
     }
     
     stages {
-        stage('Checkout') {
+        stage('Notify Build Start') {
             steps {
-                checkout scm
                 script {
-                    echo "=== BUILD INFORMATION ==="
-                    echo "Build Number: ${env.BUILD_NUMBER}"
-                    echo "Branch: ${env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'unknown'}"
-                    echo "Docker Tag: ${env.DOCKER_TAG}"
-                    echo "Build URL: ${env.BUILD_URL}"
-                    echo "Job Name: ${env.JOB_NAME}"
-                    echo "========================="
+                    sendSlackNotification('start', 'STARTED', '⚙️')
                 }
             }
         }
         
-        stage('Notify Build Start') {
+        stage('Checkout') {
             steps {
-                script {
-                    def branchName = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'unknown').replace('origin/', '')
-                    def ticketNo = "SHEFA2-3030"  // Hardcoded for demo - extract from branch in production
-                    
-                    def message = """
-                    {
-                        "text": "Build Started ⚙️",
-                        "attachments": [
-                            {
-                                "color": "#439FE0",
-                                "fields": [
-                                    {
-                                        "title": "Pipeline",
-                                        "value": "<${env.BUILD_URL}|${env.JOB_NAME}/Docker-Build-Backend>",
-                                        "short": true
-                                    },
-                                    {
-                                        "title": "Build",
-                                        "value": "#${env.BUILD_NUMBER}",
-                                        "short": true
-                                    },
-                                    {
-                                        "title": "Branch",
-                                        "value": "${branchName}",
-                                        "short": true
-                                    },
-                                    {
-                                        "title": "Ticket No",
-                                        "value": "${ticketNo}",
-                                        "short": true
-                                    },
-                                    {
-                                        "title": "Triggered By",
-                                        "value": "Naimat",
-                                        "short": false
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                    """
-                    
-                    sh """
-                        curl -X POST -H 'Content-type: application/json' \\
-                        --data '${message}' \\
-                        \${SLACK_WEBHOOK}
-                    """
-                }
+                checkout scm
             }
         }
         
@@ -698,7 +332,7 @@ pipeline {
                         docker build -t temp-build-${BUILD_NUMBER} .
                         
                         CONTAINER_ID=$(docker create temp-build-${BUILD_NUMBER})
-                        docker cp $CONTAINER_ID:/app/node_modules ./node_modules 2>/dev/null || echo "No node_modules to extract"
+                        docker cp $CONTAINER_ID:/app/node_modules ./node_modules || true
                         docker rm $CONTAINER_ID
                         docker rmi temp-build-${BUILD_NUMBER} || true
                     '''
@@ -742,47 +376,7 @@ pipeline {
                     sh "docker logout"
                     
                     // Send deployment notification
-                    def branchName = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'unknown').replace('origin/', '')
-                    def formattedTag = "v0.1.${env.BUILD_NUMBER}-${branchName}"
-                    
-                    def deployMessage = """
-                    {
-                        "text": "Deployment tag updated successfully 🚀",
-                        "attachments": [
-                            {
-                                "color": "#36a64f",
-                                "fields": [
-                                    {
-                                        "title": "Pipeline",
-                                        "value": "<${env.BUILD_URL}|${env.JOB_NAME}/Deploy-Backend-Development>",
-                                        "short": true
-                                    },
-                                    {
-                                        "title": "Tag",
-                                        "value": "${formattedTag}",
-                                        "short": true
-                                    },
-                                    {
-                                        "title": "Environment",
-                                        "value": "dev",
-                                        "short": true
-                                    },
-                                    {
-                                        "title": "Triggered By",
-                                        "value": "Naimat",
-                                        "short": true
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                    """
-                    
-                    sh """
-                        curl -X POST -H 'Content-type: application/json' \\
-                        --data '${deployMessage}' \\
-                        \${SLACK_WEBHOOK}
-                    """
+                    sendSlackNotification('deployment', 'SUCCESS', '🚀')
                 }
             }
         }
@@ -791,114 +385,19 @@ pipeline {
     post {
         success {
             script {
-                def branchName = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'unknown').replace('origin/', '')
-                def formattedTag = "v0.1.${env.BUILD_NUMBER}-${branchName}"
-                def ticketNo = "SHEFA2-3030"  // Hardcoded for demo
-                
-                def successMessage = """
-                {
-                    "text": "Build completed successfully 🔥",
-                    "attachments": [
-                        {
-                            "color": "#36a64f",
-                            "fields": [
-                                {
-                                    "title": "Pipeline",
-                                    "value": "<${env.BUILD_URL}|${env.JOB_NAME}/Docker-Build-Backend>",
-                                    "short": true
-                                },
-                                {
-                                    "title": "Tag",
-                                    "value": "${formattedTag}",
-                                    "short": true
-                                },
-                                {
-                                    "title": "Branch",
-                                    "value": "${branchName}",
-                                    "short": true
-                                },
-                                {
-                                    "title": "Ticket No",
-                                    "value": "${ticketNo}",
-                                    "short": true
-                                },
-                                {
-                                    "title": "Triggered By",
-                                    "value": "Naimat",
-                                    "short": true
-                                },
-                                {
-                                    "title": "Duration",
-                                    "value": "${currentBuild.durationString}",
-                                    "short": true
-                                }
-                            ]
-                        }
-                    ]
-                }
-                """
-                
-                sh """
-                    curl -X POST -H 'Content-type: application/json' \\
-                    --data '${successMessage}' \\
-                    \${SLACK_WEBHOOK}
-                """
+                sendSlackNotification('build', 'SUCCESS', '✅')
             }
         }
         
         failure {
             script {
-                def branchName = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'unknown').replace('origin/', '')
-                def ticketNo = "SHEFA2-3030"  // Hardcoded for demo
-                
-                def failureMessage = """
-                {
-                    "text": "Build failed ❌",
-                    "attachments": [
-                        {
-                            "color": "#ff0000",
-                            "fields": [
-                                {
-                                    "title": "Pipeline",
-                                    "value": "<${env.BUILD_URL}|${env.JOB_NAME}/Docker-Build-Backend>",
-                                    "short": true
-                                },
-                                {
-                                    "title": "Build",
-                                    "value": "#${env.BUILD_NUMBER}",
-                                    "short": true
-                                },
-                                {
-                                    "title": "Branch",
-                                    "value": "${branchName}",
-                                    "short": true
-                                },
-                                {
-                                    "title": "Ticket No",
-                                    "value": "${ticketNo}",
-                                    "short": true
-                                },
-                                {
-                                    "title": "Triggered By",
-                                    "value": "Naimat",
-                                    "short": true
-                                },
-                                {
-                                    "title": "Duration",
-                                    "value": "${currentBuild.durationString}",
-                                    "short": true
-                                }
-                            ]
-                        }
-                    ]
-                }
-                """
-                
-                sh """
-                    curl -X POST -H 'Content-type: application/json' \\
-                    --data '${failureMessage}' \\
-                    \${SLACK_WEBHOOK}
-                """
+                sendSlackNotification('build', 'FAILED', '❌')
+            }
+        }
+        
+        unstable {
+            script {
+                sendSlackNotification('build', 'UNSTABLE', '⚠️')
             }
         }
         
@@ -908,5 +407,228 @@ pipeline {
                 sh "docker rmi ${DOCKER_IMAGE}:latest || true"
             }
         }
+    }
+}
+
+// Helper function to extract JIRA ticket from branch name or commit message
+def extractJiraTicket() {
+    try {
+        def branchName = env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'unknown'
+        def ticketPattern = /([A-Z]+-\d+)/
+        def matcher = branchName =~ ticketPattern
+        if (matcher) {
+            return matcher[0][1]
+        }
+        
+        // Try to extract from latest commit message
+        def commitMessage = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
+        matcher = commitMessage =~ ticketPattern
+        if (matcher) {
+            return matcher[0][1]
+        }
+        
+        return "N/A"
+    } catch (Exception e) {
+        return "N/A"
+    }
+}
+
+// Helper function to determine environment based on branch
+def determineEnvironment() {
+    def branch = env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'unknown'
+    if (branch.contains('main') || branch.contains('master')) {
+        return 'production'
+    } else if (branch.contains('staging') || branch.contains('stage')) {
+        return 'staging'
+    } else if (branch.contains('develop') || branch.contains('dev')) {
+        return 'dev'
+    } else if (branch.contains('qa') || branch.contains('test')) {
+        return 'qa'
+    }
+    return 'dev'
+}
+
+// Enhanced Slack notification function
+def sendSlackNotification(String type, String status, String emoji) {
+    def color = getStatusColor(status)
+    def timestamp = new Date().format("HH:mm")
+    def jobUrl = "${env.BUILD_URL}"
+    def repoName = env.JOB_NAME.split('/')[0] ?: env.JOB_NAME
+    
+    def message = [:]
+    
+    if (type == 'start') {
+        message = [
+            "attachments": [
+                [
+                    "color": "#36a64f",
+                    "blocks": [
+                        [
+                            "type": "header",
+                            "text": [
+                                "type": "plain_text",
+                                "text": "${emoji} Build Started",
+                                "emoji": true
+                            ]
+                        ],
+                        [
+                            "type": "section",
+                            "fields": [
+                                [
+                                    "type": "mrkdwn",
+                                    "text": "*Pipeline:* <${jobUrl}|${repoName}/Docker-Build-Backend>"
+                                ],
+                                [
+                                    "type": "mrkdwn",
+                                    "text": "*Build:* #${env.BUILD_NUMBER}"
+                                ],
+                                [
+                                    "type": "mrkdwn",
+                                    "text": "*Branch:* ${env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'unknown'}"
+                                ],
+                                [
+                                    "type": "mrkdwn",
+                                    "text": "*Ticket No:* ${env.JIRA_TICKET}"
+                                ],
+                                [
+                                    "type": "mrkdwn",
+                                    "text": "*Triggered By:* ${env.TRIGGERED_BY}"
+                                ],
+                                [
+                                    "type": "mrkdwn",
+                                    "text": "*Environment:* ${env.ENVIRONMENT}"
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+    } else if (type == 'deployment') {
+        message = [
+            "attachments": [
+                [
+                    "color": "#36a64f",
+                    "blocks": [
+                        [
+                            "type": "header",
+                            "text": [
+                                "type": "plain_text",
+                                "text": "${emoji} Deployment tag updated successfully",
+                                "emoji": true
+                            ]
+                        ],
+                        [
+                            "type": "section",
+                            "fields": [
+                                [
+                                    "type": "mrkdwn",
+                                    "text": "*Pipeline:* <${jobUrl}|${repoName}/Deploy-Backend-${env.ENVIRONMENT.capitalize()}>"
+                                ],
+                                [
+                                    "type": "mrkdwn",
+                                    "text": "*Tag:* ${env.DOCKER_TAG}"
+                                ],
+                                [
+                                    "type": "mrkdwn",
+                                    "text": "*Environment:* ${env.ENVIRONMENT}"
+                                ],
+                                [
+                                    "type": "mrkdwn",
+                                    "text": "*Triggered By:* ${env.TRIGGERED_BY}"
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+    } else {
+        // Build completion notification
+        def statusText = status == 'SUCCESS' ? 'Build completed successfully' : 
+                        status == 'FAILED' ? 'Build failed' : 'Build unstable'
+        
+        message = [
+            "attachments": [
+                [
+                    "color": color,
+                    "blocks": [
+                        [
+                            "type": "header",
+                            "text": [
+                                "type": "plain_text",
+                                "text": "${emoji} ${statusText}",
+                                "emoji": true
+                            ]
+                        ],
+                        [
+                            "type": "section",
+                            "fields": [
+                                [
+                                    "type": "mrkdwn",
+                                    "text": "*Pipeline:* <${jobUrl}|${repoName}/Docker-Build-Backend>"
+                                ],
+                                [
+                                    "type": "mrkdwn",
+                                    "text": "*Tag:* v${env.DOCKER_TAG}-${env.ENVIRONMENT}"
+                                ],
+                                [
+                                    "type": "mrkdwn",
+                                    "text": "*Branch:* ${env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'unknown'}"
+                                ],
+                                [
+                                    "type": "mrkdwn",
+                                    "text": "*Ticket No:* ${env.JIRA_TICKET}"
+                                ],
+                                [
+                                    "type": "mrkdwn",
+                                    "text": "*Triggered By:* ${env.TRIGGERED_BY}"
+                                ],
+                                [
+                                    "type": "mrkdwn",
+                                    "text": "*Duration:* ${currentBuild.durationString.replace(' and counting', '')}"
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        
+        // Add failure details if build failed
+        if (status == 'FAILED' && currentBuild.rawBuild.getLog(10)) {
+            def failureLog = currentBuild.rawBuild.getLog(10).join('\n')
+            message.attachments[0].blocks.add([
+                "type": "section",
+                "text": [
+                    "type": "mrkdwn",
+                    "text": "*Failure Details:*\n```${failureLog.take(500)}${failureLog.length() > 500 ? '...' : ''}```"
+                ]
+            ])
+        }
+    }
+    
+    def payload = groovy.json.JsonBuilder(message).toString()
+    
+    sh """
+        curl -X POST -H 'Content-type: application/json' \\
+        --data '${payload.replace("'", "\\'")}' \\
+        \${SLACK_WEBHOOK}
+    """
+}
+
+// Helper function to get status color
+def getStatusColor(String status) {
+    switch(status) {
+        case 'SUCCESS':
+            return '#36a64f'
+        case 'FAILED':
+            return '#ff0000'
+        case 'UNSTABLE':
+            return '#ffb900'
+        case 'STARTED':
+            return '#439FE0'
+        default:
+            return '#808080'
     }
 }

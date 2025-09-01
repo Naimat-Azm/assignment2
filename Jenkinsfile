@@ -5,14 +5,14 @@ pipeline {
         string(
             name: 'DOCKER_TAG',
             defaultValue: '',
-            description: 'Enter Docker image tag (leave empty to auto-increment last digit, e.g., v1.0.0 → v1.0.1)'
+            description: 'Optional: Enter Docker image tag (e.g., v1.0.5). Leave empty for auto-increment.'
         )
     }
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
-        SLACK_WEBHOOK         = credentials('slack-webhook-url')
-        DOCKER_IMAGE          = 'naimatazmdev/demoapp'
+        SLACK_WEBHOOK = credentials('slack-webhook-url')
+        DOCKER_IMAGE = 'naimatazmdev/demoapp'
     }
 
     stages {
@@ -24,9 +24,9 @@ pipeline {
 
                         withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
                             def tagsJson = sh(
-                                script: """
-                                    curl -s -u ${USER}:${PASS} https://hub.docker.com/v2/repositories/${DOCKER_IMAGE}/tags?page_size=100
-                                """,
+                                script: '''
+                                    curl -s -u "$USER:$PASS" "https://hub.docker.com/v2/repositories/naimatazmdev/demoapp/tags?page_size=100"
+                                ''',
                                 returnStdout: true
                             ).trim()
 
@@ -34,24 +34,17 @@ pipeline {
 
                             try {
                                 def parsed = readJSON text: tagsJson
-
                                 if (parsed?.results) {
-                                    def tags = parsed.results*.name.findAll { it ==~ /^v\\d+\\.\\d+\\.\\d+\$/ }
-
+                                    def tags = parsed.results*.name.findAll { it ==~ /^v\\d+\\.\\d+\\.\\d+$/ }
                                     if (tags && tags.size() > 0) {
                                         tags = tags.sort { a, b ->
                                             def va = a.replace('v','').split('\\.').collect { it as int }
                                             def vb = b.replace('v','').split('\\.').collect { it as int }
                                             return va <=> vb
                                         }
-
                                         latestTag = tags.last()
                                         echo "Latest tag found on DockerHub: ${latestTag}"
-                                    } else {
-                                        echo "No valid semantic tags found, using default v1.0.0"
                                     }
-                                } else {
-                                    echo "No results field in DockerHub response, using default v1.0.0"
                                 }
                             } catch (Exception e) {
                                 echo "Failed to parse tags JSON, using default v1.0.0"
@@ -83,7 +76,6 @@ pipeline {
                     sh '''
                         echo "Building image with dependencies..."
                         docker build -t temp-build-${BUILD_NUMBER} .
-                        
                         CONTAINER_ID=$(docker create temp-build-${BUILD_NUMBER})
                         docker cp $CONTAINER_ID:/app/node_modules ./node_modules || true
                         docker rm $CONTAINER_ID
@@ -123,10 +115,14 @@ pipeline {
 
         stage('Push to DockerHub') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-                    sh "echo $PASS | docker login -u $USER --password-stdin"
-                    sh "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
-                    sh "docker logout"
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                        sh '''
+                            echo "$PASS" | docker login -u "$USER" --password-stdin
+                            docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
+                            docker logout
+                        '''
+                    }
                 }
             }
         }
@@ -135,17 +131,32 @@ pipeline {
     post {
         success {
             script {
-                def message = "✅ SUCCESS Build #${env.BUILD_NUMBER}\\n" +
-                              "Docker Image: ${DOCKER_IMAGE}:${DOCKER_TAG}\\n" +
+                def message = "✅ Jenkins Pipeline SUCCESS\n" +
+                              "Repository: ${env.JOB_NAME}\n" +
+                              "Build: #${env.BUILD_NUMBER}\n" +
+                              "Docker Image: ${DOCKER_IMAGE}:${DOCKER_TAG}\n" +
                               "Duration: ${currentBuild.durationString}"
-                sh """curl -X POST -H 'Content-type: application/json' --data '{"text": "${message}"}' ${SLACK_WEBHOOK}"""
+
+                sh """
+                    curl -X POST -H 'Content-type: application/json' \
+                    --data '{"text": "${message}"}' \
+                    ${SLACK_WEBHOOK}
+                """
             }
         }
 
         failure {
             script {
-                def message = "❌ FAILED Build #${env.BUILD_NUMBER}\\nDuration: ${currentBuild.durationString}"
-                sh """curl -X POST -H 'Content-type: application/json' --data '{"text": "${message}"}' ${SLACK_WEBHOOK}"""
+                def message = "❌ Jenkins Pipeline FAILED\n" +
+                              "Repository: ${env.JOB_NAME}\n" +
+                              "Build: #${env.BUILD_NUMBER}\n" +
+                              "Duration: ${currentBuild.durationString}"
+
+                sh """
+                    curl -X POST -H 'Content-type: application/json' \
+                    --data '{"text": "${message}"}' \
+                    ${SLACK_WEBHOOK}
+                """
             }
         }
 

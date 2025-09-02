@@ -95,7 +95,7 @@ pipeline {
                         // Fetch the latest tag from the registry
                         def latestTag = sh(
                             script: """
-                            curl -s -u ${DOCKER_USERNAME}:${DOCKER_PASSWORD} https://${DOCKER_REGISTRY}/v2/${DOCKER_IMAGE}/tags/list | jq -r '.tags[]' | grep -E '^v[0-9]+\\.[0-9]+\\.[0-9]+$' | sort -V | tail -n 1
+                            curl -s -u \${DOCKER_USERNAME}:\${DOCKER_PASSWORD} https://\${DOCKER_REGISTRY}/v2/\${DOCKER_IMAGE}/tags/list | jq -r '.tags[]' | grep -E '^v[0-9]+\\.[0-9]+\\.[0-9]+$' | sort -V | tail -n 1
                             """,
                             returnStdout: true
                         ).trim()

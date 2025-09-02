@@ -46,7 +46,7 @@ pipeline {
         stage('Push Docker Image') {
             steps {
                 script {
-                    withCredentials([usernamePassword(credentialsId: 'alibaba-docker-credentials', 
+                    withCredentials([usernamePassword(credentialsId: 'docker-registry-credentials', 
                                                       usernameVariable: 'DOCKER_USERNAME', 
                                                       passwordVariable: 'DOCKER_PASSWORD')]) {
                         echo "Logging into Docker registry ${DOCKER_REGISTRY}..."
